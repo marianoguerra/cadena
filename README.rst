@@ -242,3 +242,149 @@ And::
 
 In case you don't remember, you can quit with `q().`
 
+Joining the Cluster Together
+----------------------------
+
+Until here we built 3 releases of the same code with slight modifications to
+allow running a cluster on one computer, but 3 nodes running doesn't mean
+we have a cluster, for that we need to use what we learned in the `Multi-Paxos with riak_ensemble Part 1 <http://marianoguerra.org/posts/multi-paxos-with-riak_ensemble-part-1/>`_ but now on code and not interactively.
+
+For that we will create a cadena_console module that we will use to make calls
+from the outside and trigger actions on each node, the code is similar to the
+one presented in `Multi-Paxos with riak_ensemble Part 1 <http://marianoguerra.org/posts/multi-paxos-with-riak_ensemble-part-1/>`_.
+
+.. code:: erlang
+
+
+    join([NodeStr]) ->
+        % node name comes as a list string, we need it as an atom
+        Node = list_to_atom(NodeStr),
+        % check that the node exists and is alive
+        case net_adm:ping(Node) of
+            % if not, return an error
+            pang ->
+                {error, not_reachable};
+            % if it replies, let's join him passing our node reference
+            pong ->
+                riak_ensemble_manager:join(Node, node())
+        end.
+
+    create([]) ->
+        % enable riak_ensemble_manager
+        riak_ensemble_manager:enable(),
+        % wait until it stabilizes
+        wait_stable().
+
+    cluster_status() ->
+        case riak_ensemble_manager:enabled() of
+            false ->
+                {error, not_enabled};
+            true ->
+                Nodes = lists:sort(riak_ensemble_manager:cluster()),
+                io:format("Nodes in cluster: ~p~n",[Nodes]),
+                LeaderNode = node(riak_ensemble_manager:get_leader_pid(root)),
+                io:format("Leader: ~p~n",[LeaderNode])
+        end.
+
+We also need to add the riak_ensemble supervisor to our supervisor tree in cadena_sup:
+
+.. code:: erlang
+
+    init([]) ->
+        % get the configuration from sys.config
+        DataRoot = application:get_env(riak_ensemble, data_root, "./data"),
+        % create a unique path for each node to avoid clashes if running more
+        % than one node in the same computer
+        NodeDataDir = filename:join(DataRoot, atom_to_list(node())),
+
+        Ensemble = {riak_ensemble_sup,
+                    {riak_ensemble_sup, start_link,
+                     [NodeDataDir]},
+                    permanent, 20000, supervisor, [riak_ensemble_sup]},
+
+        {ok, { {one_for_all, 0, 1}, [Ensemble]} }.
+
+
+Before building the dev cluster we need to add the `crypto` app to cadena.app.src
+since it's needed by riak_ensemble to create the cluster.
+
+Now let's build the dev cluster, I created a Makefile to make it simpler::
+
+    make devrel
+
+Now on three different shells run one command on each::
+
+    make node1-console
+    make node2-console
+    make node3-console
+
+Now let's make an rpc call to enable the riak_ensemble cluster on node1::
+
+    ./_build/node1/rel/cadena/bin/cadena rpc cadena_console create
+
+On node1 you should see something like::
+
+    [info] {root,'node1@127.0.0.1'}: Leading
+
+Now let's join node2 to node1::
+
+    ./_build/node2/rel/cadena/bin/cadena rpc cadena_console join node1@127.0.0.1
+
+On node1 you should see::
+
+    [info] join(Vsn): {1,152} :: 'node2@127.0.0.1' :: ['node1@127.0.0.1']
+
+On node2::
+
+    [info] JOIN: success
+
+Finally let's join node3::
+
+    ./_build/node3/rel/cadena/bin/cadena rpc cadena_console join node1@127.0.0.1
+
+Output on node1::
+
+    [info] join(Vsn): {1,453} :: 'node3@127.0.0.1' :: ['node1@127.0.0.1','node2@127.0.0.1']
+
+
+On node3::
+
+    [info] JOIN: success
+
+Let's check that the 3 nodes have the same view of the cluster, let's ask node1
+what's the ensemble status::
+
+    ./_build/node1/rel/cadena/bin/cadena rpc cadena_console ensemble_status
+
+::
+
+    Nodes in cluster: ['node1@127.0.0.1','node2@127.0.0.1','node3@127.0.0.1']
+    Leader: 'node1@127.0.0.1'
+
+node2::
+
+    $ ./_build/node2/rel/cadena/bin/cadena rpc cadena_console ensemble_status
+
+::
+
+    Nodes in cluster: ['node1@127.0.0.1','node2@127.0.0.1','node3@127.0.0.1']
+    Leader: 'node1@127.0.0.1'
+
+node3::
+
+    $ ./_build/node3/rel/cadena/bin/cadena rpc cadena_console ensemble_status
+
+::
+
+    Nodes in cluster: ['node1@127.0.0.1','node2@127.0.0.1','node3@127.0.0.1']
+    Leader: 'node1@127.0.0.1'
+
+Everything looks right, stop the 3 nodes (`q().`) and start them again, you
+will see that after starting up node1 logs::
+
+    [info] {root,'node1@127.0.0.1'}: Leading
+
+And if you call ensemble_status on any node you get the same outputs as before,
+this means they remember the cluster topology even after restarts.
+
+
