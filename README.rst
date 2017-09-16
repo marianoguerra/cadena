@@ -23,11 +23,12 @@ cd cadena
 Configuring Dev Release
 -----------------------
 
-1) Add Dependencies
-2) Configure relx section
-2.1) Add overlay variables file vars.config
-2.2) Add sys.config
-2.3) Add vm.args
+1. Add Dependencies
+2. Configure relx section
+
+    1. Add overlay variables file vars.config
+    2. Add sys.config
+    3. Add vm.args
 
 Build a release to test that everything is setup correctly::
 
@@ -99,8 +100,8 @@ Output::
 
 .. note::
 
-	 Note the Ctrl+d to exit, if we write `q().` not only we dettach the
-     console but we also stop the system!
+    Note the Ctrl+d to exit, if we write `q().` not only we dettach the
+    console but we also stop the system!
 
 Let's try it.
 
@@ -140,4 +141,104 @@ Now let's see if it's alive::
 	$ _build/default/rel/cadena/bin/cadena ping
 
 	Node 'cadena@127.0.0.1' not responding to pings.
+
+Configure Prod and Dev Cluster Releases
+---------------------------------------
+
+Building Prod Release
+.....................
+
+We start by adding a new section to rebar.config called profiles, and define
+4 profiles that override the default release config with specific values,
+let's start by trying the prod profile, which we will use to create production
+releases of the project::
+
+    rebar3 as prod release
+
+Output::
+
+    ===> Verifying dependencies...
+    ...
+    ===> Compiling cadena
+    ===> Running cuttlefish schema generator
+    ===> Starting relx build process ...
+    ===> Resolving OTP Applications from directories:
+              _build/prod/lib
+              erl-19.3/lib
+    ===> Resolved cadena-0.1.0
+    ===> Including Erts from erl-19.3
+    ===> release successfully created!
+
+Notice now that we have a new folder in the _build directory::
+
+    $ ls -1 _build
+
+Output::
+
+    default
+    prod
+
+The results of the commands run "as prod" are stored in the prod folder.
+
+You will notice if you explore the prod/rel/cadena folder that there's a folder
+called erts-8.3 (the version may differ if you are using a different erlang
+version), that folder is there because of the `include_erts` option we overrided
+in the prod profile.
+
+This means you can yip the _build/prod/rel/cadena folder, upload it to a server
+that doesn't have erlang install it and you can still run your release there.
+
+This is a good way to be sure that the version running in production is the
+same you use in development.
+
+Just be careful with deploying to an operating system too different to the one
+you used to create the release becase you may have problems with bindings like
+libc or openssl.
+
+Running it is done as usual, only the path changes::
+
+    _build/prod/rel/cadena/bin/cadena console
+
+    _build/prod/rel/cadena/bin/cadena start
+    _build/prod/rel/cadena/bin/cadena ping
+    _build/prod/rel/cadena/bin/cadena attach
+    _build/prod/rel/cadena/bin/cadena stop
+
+Building Dev Cluster Releases
+.............................
+
+To build a cluster we need at least 3 nodes, that's why the last 3 profiles
+are node1, node2 and node3, they need to have different node names, for that
+we use the overlay var files to override the name of each.
+
+Now let's build them::
+
+    rebar3 as node1 release
+    rebar3 as node2 release
+    rebar3 as node3 release
+
+The output for each should be similar to the one for the prod release.
+
+Now on three different shells start each node::
+
+    ./_build/node1/rel/cadena/bin/cadena console
+
+Check the name of the node in the shell::
+
+    (node1@127.0.0.1)1>
+
+Do the same for node2 and node3 on different shells::
+
+    ./_build/node2/rel/cadena/bin/cadena console
+    ./_build/node3/rel/cadena/bin/cadena console
+ 
+You should get respectively::
+
+    (node2@127.0.0.1)1>
+
+And::
+
+    (node3@127.0.0.1)1>
+
+In case you don't remember, you can quit with `q().`
 
