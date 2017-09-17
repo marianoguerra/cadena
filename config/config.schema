@@ -1,0 +1,20 @@
+%%-*- mode: erlang -*-
+%% ex: ft=erlang ts=4 sw=4 et
+
+%% @doc port to listen to for HTTP API
+{mapping, "http.port", "cadena.http_port", [
+  {datatype, integer},
+  {default, {{http_port}} }
+]}.
+
+%% @doc number of acceptors to user for HTTP API
+{mapping, "http.acceptors", "cadena.http_acceptors", [
+  {datatype, integer},
+  {default, {{http_acceptors}} }
+]}.
+
+%% @doc folder where ensemble data is stored
+{mapping, "data.dir", "riak_ensemble.data_root", [
+  {default, "./cadena_data"}
+]}.
+

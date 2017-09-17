@@ -1,10 +1,24 @@
 {"1.1.0",
-[{<<"goldrush">>,{pkg,<<"goldrush">>,<<"0.1.9">>},2},
- {<<"lager">>,{pkg,<<"lager">>,<<"3.2.4">>},1},
+[{<<"cowboy">>,
+  {git,"https://github.com/ninenines/cowboy.git",
+       {ref,"17400f73b4f84c997abe4e03837d1642d3a188ce"}},
+  0},
+ {<<"cowlib">>,
+  {git,"https://github.com/ninenines/cowlib",
+       {ref,"11e07d3c2b164d06ad35188d83ad70e7501396db"}},
+  1},
+ {<<"goldrush">>,{pkg,<<"goldrush">>,<<"0.1.9">>},1},
+ {<<"jsone">>,{pkg,<<"jsone">>,<<"1.4.5">>},0},
+ {<<"lager">>,{pkg,<<"lager">>,<<"3.5.1">>},0},
+ {<<"ranch">>,
+  {git,"https://github.com/ninenines/ranch",
+       {ref,"55c2a9d623454f372a15e99721a37093d8773b48"}},
+  1},
  {<<"riak_ensemble">>,{pkg,<<"riak_ensemble_ng">>,<<"2.4.0">>},0}]}.
 [
 {pkg_hash,[
  {<<"goldrush">>, <<"F06E5D5F1277DA5C413E84D5A2924174182FB108DABB39D5EC548B27424CD106">>},
- {<<"lager">>, <<"A6DEB74DAE7927F46BD13255268308EF03EB206EC784A94EAF7C1C0F3B811615">>},
+ {<<"jsone">>, <<"547AEFEC1C67FE3283F77BAC4DAF85F3F593002764F768FAAA423875A51A2320">>},
+ {<<"lager">>, <<"63897A61AF646C59BB928FEE9756CE8BDD02D5A1A2F3551D4A5E38386C2CC071">>},
  {<<"riak_ensemble">>, <<"6570463BF09F1200C003DE298C5D6615C418D3BF0A2DF5CAF469A9DF2558059A">>}]}
 ].

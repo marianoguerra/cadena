@@ -387,4 +387,220 @@ will see that after starting up node1 logs::
 And if you call ensemble_status on any node you get the same outputs as before,
 this means they remember the cluster topology even after restarts.
 
+Key/Value Store HTTP API
+------------------------
 
+To have an HTTP API we will need an HTTP server, in our case we will use
+`Cowboy 2.0 RC 3 <https://ninenines.eu/docs/#cowboy>`_, for that we need to:
+
+1. Add it as a dependency (we will load if from git since it's still a release candidata)
+2. Add it to our list of applications to start when our application starts
+3. Add it to the list of dependencies to include in our release
+4. Set up the HTTP listener and routes when our application starts
+   + Read the cowboy documentation for details on how to `set up the listener <https://ninenines.eu/docs/en/cowboy/2.0/guide/listeners/>`_
+
+We setup just one route that is handled by the cadena_h_keys module, it's a
+plain HTTP handler, no fancy REST stuff for now, there we handle the request on
+the init/2 function itself, we pattern match against the method field on the
+request object and handle:
+
+POST
+	set a key in a given ensemble to the value sent in the JSON request body
+
+GET
+	get a key in a given ensemble, if not found null will be returned in the value field in the response
+
+DELETE
+	delete a key in a given ensemble, returns null both if the key existed and if itdidn't
+
+Any other method would get a 405 Method Not Allowed response.
+
+The route has the format /keys/<ensemble>/<key>, for now we only allow the root
+ensemble to be set in the <ensemble> part of the path.
+
+We also add the jsone library to encode/decode JSON and the lager library to
+log messages.
+
+We add both to the list of dependencies to include in the release, we don't add
+them to the list of applications in app.src since we don't need to start
+anything for them, they are just libraries we use.
+
+We will also need to have a way to override the HTTP port where each instance
+listens to so we can run a cluster on one computer and each node can listen
+for HTTP requests on a different port.
+
+The dev and prod releases will listen on 8080 as specified in vars.config.
+
+node1 will listen on port 8081 (override in vars_node1.config)
+
+node2 will listen on port 8082 (override in vars_node2.config)
+
+node3 will listen on port 8083 (override in vars_node3.config)
+
+To avoid having to configure this in sys.config we will define a cuttlefish
+schema in config.schema that cuttlefish will use to generate a default config
+file and validation code for us.
+
+We have to replace the variables from variable overrides in our config.schema
+file for each release before it's processed by cuttlefish itself, for that we
+use the template directive on an overlay section on the release config.
+
+Build devrel:
+
+.. code:: sh
+
+	make revrel
+
+Check the configuration file generated for each node at::
+
+	_build/node1/rel/cadena/etc/cadena.conf
+	_build/node2/rel/cadena/etc/cadena.conf
+	_build/node3/rel/cadena/etc/cadena.conf
+
+The first part is of interest to use, it looks like this for node1::
+
+
+	## port to listen to for HTTP API
+	## 
+	## Default: 8081
+	## 
+	## Acceptable values:
+	##   - an integer
+	http.port = 8081
+
+	## number of acceptors to user for HTTP API
+	## 
+	## Default: 100
+	## 
+	## Acceptable values:
+	##   - an integer
+	http.acceptors = 100
+
+	## folder where ensemble data is stored
+	## 
+	## Default: ./cadena_data
+	## 
+	## Acceptable values:
+	##   - text
+	data.dir = ./cadena_data
+
+
+Start 3 nodes in 3 different shells:
+
+.. code:: sh
+
+	make node1-console
+	make node2-console
+	make node3-console
+
+Start enseble and join nodes, I created a target on the Makefile to make it easier:
+
+.. code:: sh
+
+	make devrel-setup
+
+Let's set **key1** in ensemble **root** to **42** on node1 (port 8081):
+
+.. code:: sh
+
+    curl -X POST http://localhost:8081/keys/root/key1 -d 42
+
+Response:
+
+.. code:: js
+
+    {"data":{"epoch":2,"key":"key1","seq":10,"value":42},"ok":true}
+
+Let's get **key1** in ensemble **root** to **42** on node2 (port 8082):
+
+.. code:: sh
+
+    curl -X GET http://localhost:8082/keys/root/key1
+
+Response:
+
+.. code:: js
+
+    {"data":{"epoch":2,"key":"key1","seq":10,"value":42},"ok":true}
+
+Same on node3:
+
+.. code:: sh
+
+    curl -X GET http://localhost:8083/keys/root/key1
+
+Response:
+
+.. code:: js
+
+    {"data":{"epoch":2,"key":"key1","seq":10,"value":42},"ok":true}
+
+Overwrite on node1:
+
+.. code:: sh
+
+    curl -X POST http://localhost:8081/keys/root/key1 -d '{"number": 42}'
+
+Response:
+
+.. code:: js
+
+    {"data":{"epoch":2,"key":"key1","seq":400,"value":{"number":42}},"ok":true}
+
+Get on node2:
+
+.. code:: sh
+
+	curl -X GET http://localhost:8082/keys/root/key2
+
+.. code:: js
+
+	{"data":{"epoch":3,"key":"key2","seq":11,"value":null},"ok":true}
+
+Let's set **key2** in ensemble **root** to **{"number": 42}** on node1 (port 8082):
+
+.. code:: sh
+
+	curl -X POST http://localhost:8081/keys/root/key2 -d '{"number": 42}'
+
+Response:
+
+.. code:: js
+
+	{"data":{"epoch":3,"key":"key2","seq":67,"value":{"number":42}},"ok":true}
+
+Get it on node2:
+
+.. code:: sh
+
+	curl -X GET http://localhost:8082/keys/root/key2
+
+Response:
+
+.. code:: js
+
+	{"data":{"epoch":3,"key":"key2","seq":67,"value":{"number":42}},"ok":true}
+
+Delete **key2** in ensemble **root** on node2:
+
+.. code:: sh
+
+	curl -X DELETE http://localhost:8082/keys/root/key2
+
+Response:
+
+.. code:: js
+
+	{"data":{"epoch":3,"key":"key2","seq":137,"value":null},"ok":true}
+
+Check that it was removed by trying to get it again on node2:
+
+.. code:: sh
+
+	curl -X GET http://localhost:8082/keys/root/key2
+
+Response:
+
+.. code:: js
+
+	{"data":{"epoch":3,"key":"key2","seq":137,"value":null},"ok":true}

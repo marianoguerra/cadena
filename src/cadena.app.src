@@ -6,7 +6,9 @@
   {applications,
    [kernel,
     stdlib,
-    crypto
+    crypto,
+    cowboy,
+    lager
    ]},
   {env,[]},
   {modules, []},
